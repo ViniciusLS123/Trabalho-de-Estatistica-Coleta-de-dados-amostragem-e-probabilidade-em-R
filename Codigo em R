@@ -1,0 +1,106 @@
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tidyr)
+
+# ----------------------------------------------------
+# 1. Importar base
+# ----------------------------------------------------
+df <- read_csv("earthquake_data_tsunami.csv")
+
+
+# Ver estrutura
+print(head(df))
+print(summary(df))
+
+# Padronizar nomes e preparar colunas
+df <- df %>%
+  rename_with(tolower) %>%
+  mutate(tsunami = ifelse(tsunami > 0, 1, 0)) %>%
+  filter(!is.na(magnitude))
+
+# ----------------------------------------------------
+# 2. Vinícius — Tipos de Amostragem
+# ----------------------------------------------------
+set.seed(123)
+
+# Amostra Aleatória Simples
+amostra_aleatoria <- sample_n(df, 100)
+
+# Amostra Estratificada (por tsunami)
+amostra_estrat <- df %>%
+  group_by(tsunami) %>%
+  sample_frac(0.1)
+
+# Amostra Sistemática
+k <- nrow(df) %/% 100
+amostra_sist <- df[seq(1, nrow(df), by = k), ]
+
+# Conglomerado (por país, se existir)
+if("country" %in% colnames(df)){
+  clusters <- unique(df$country)
+  amostra_cluster <- df %>% filter(country %in% sample(clusters, 3))
+} else {
+  amostra_cluster <- sample_n(df, 100)
+}
+
+# Calcular estatísticas das amostras
+estatisticas <- tibble(
+  Tipo = c("Aleatória Simples", "Estratificada", "Sistemática", "Conglomerado"),
+  Média_Magnitude = c(
+    mean(amostra_aleatoria$magnitude, na.rm = TRUE),
+    mean(amostra_estrat$magnitude, na.rm = TRUE),
+    mean(amostra_sist$magnitude, na.rm = TRUE),
+    mean(amostra_cluster$magnitude, na.rm = TRUE)
+  ),
+  Desvio_Padrão = c(
+    sd(amostra_aleatoria$magnitude, na.rm = TRUE),
+    sd(amostra_estrat$magnitude, na.rm = TRUE),
+    sd(amostra_sist$magnitude, na.rm = TRUE),
+    sd(amostra_cluster$magnitude, na.rm = TRUE)
+  )
+)
+
+cat("\n--- Estatísticas das Amostras ---\n")
+print(estatisticas)
+
+# ----------------------------------------------------
+# 3. Leandro — Probabilidade
+# ----------------------------------------------------
+p_tsunami <- mean(df$tsunami == 1)
+p_forte <- mean(df$magnitude > 6)
+p_cond <- mean(df$tsunami == 1 & df$magnitude > 6) / p_forte
+indep <- abs((p_tsunami * p_forte) - mean(df$tsunami == 1 & df$magnitude > 6)) < 0.01
+
+cat("\n--- Probabilidades ---\n")
+cat("P(Tsunami) =", round(p_tsunami, 3), "\n")
+cat("P(Magnitude > 6) =", round(p_forte, 3), "\n")
+cat("P(Tsunami | Mag > 6) =", round(p_cond, 3), "\n")
+cat("Eventos independentes? ", indep, "\n")
+
+# ----------------------------------------------------
+# 4. Pedro — Coleta de Dados
+# ----------------------------------------------------
+cat("\n--- Processo de coleta ---\n")
+cat("1. Fonte: NOAA Earthquake Data\n")
+cat("2. Variáveis coletadas: latitude, longitude, magnitude, tsunami, país\n")
+cat("3. Amostra utilizada para análise foi estratificada.\n")
+cat("4. Exportando amostra...\n")
+
+write.csv(amostra_estrat, "amostra_terremotos.csv", row.names = FALSE)
+
+# ----------------------------------------------------
+# 5. Gráfico — Magnitude vs Tsunami
+# ----------------------------------------------------
+ggplot(df, aes(x = factor(tsunami), y = magnitude, fill = factor(tsunami))) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.4) +
+  labs(
+    title = "Distribuição da Magnitude por Ocorrência de Tsunami",
+    x = "Tsunami (0 = Não, 1 = Sim)",
+    y = "Magnitude"
+  ) +
+  scale_fill_manual(values = c("#5DADE2", "#E74C3C")) +
+  theme_minimal(base_size = 13)
+
+cat("\n--- Fim do script ---\n")
